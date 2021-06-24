@@ -8,6 +8,10 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/argoproj/argo-cd/v2/util/argo"
+
+	"github.com/argoproj/argo-cd/v2/pkg/client/clientset/versioned"
+
 	"github.com/argoproj/gitops-engine/pkg/utils/kube"
 	"github.com/go-redis/redis/v8"
 	log "github.com/sirupsen/logrus"
@@ -51,10 +55,13 @@ func NewClusterCommand(pathOpts *clientcmd.PathOptions) *cobra.Command {
 
 type ClusterWithInfo struct {
 	argoappv1.Cluster
+	// Shard holds controller shard number that handles the cluster
 	Shard int
+	// Namespaces holds list of namespaces managed by Argo CD in the cluster
+	Namespaces []string
 }
 
-func loadClusters(kubeClient *kubernetes.Clientset, replicas int, namespace string, portForwardRedis bool, cacheSrc func() (*appstatecache.Cache, error), shard int) ([]ClusterWithInfo, error) {
+func loadClusters(kubeClient *kubernetes.Clientset, appClient *versioned.Clientset, replicas int, namespace string, portForwardRedis bool, cacheSrc func() (*appstatecache.Cache, error), shard int) ([]ClusterWithInfo, error) {
 	settingsMgr := settings.NewSettingsManager(context.Background(), kubeClient, namespace)
 
 	argoDB := db.NewDB(namespace, settingsMgr, kubeClient)
@@ -78,6 +85,18 @@ func loadClusters(kubeClient *kubernetes.Clientset, replicas int, namespace stri
 		}
 	}
 
+	appItems, err := appClient.ArgoprojV1alpha1().Applications(namespace).List(context.Background(), v1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	apps := appItems.Items
+	for i, app := range apps {
+		err := argo.ValidateDestination(context.Background(), &app.Spec.Destination, argoDB)
+		if err != nil {
+			return nil, err
+		}
+		apps[i] = app
+	}
 	clusters := make([]ClusterWithInfo, len(clustersList.Items))
 	batchSize := 10
 	batchesCount := int(math.Ceil(float64(len(clusters)) / float64(batchSize)))
@@ -98,9 +117,18 @@ func loadClusters(kubeClient *kubernetes.Clientset, replicas int, namespace stri
 			if shard != -1 && clusterShard != shard {
 				return nil
 			}
-
+			nsSet := map[string]bool{}
+			for _, app := range apps {
+				if app.Spec.Destination.Server == cluster.Server {
+					nsSet[app.Spec.Destination.Namespace] = true
+				}
+			}
+			var namespaces []string
+			for ns := range nsSet {
+				namespaces = append(namespaces, ns)
+			}
 			_ = cache.GetClusterInfo(cluster.Server, &cluster.Info)
-			clusters[batchStart+i] = ClusterWithInfo{cluster, clusterShard}
+			clusters[batchStart+i] = ClusterWithInfo{cluster, clusterShard, namespaces}
 			return nil
 		})
 	}
@@ -135,6 +163,7 @@ func NewClusterShardsCommand() *cobra.Command {
 			namespace, _, err := clientConfig.Namespace()
 			errors.CheckError(err)
 			kubeClient := kubernetes.NewForConfigOrDie(clientCfg)
+			appClient := versioned.NewForConfigOrDie(clientCfg)
 
 			if replicas == 0 {
 				replicas, err = getControllerReplicas(kubeClient, namespace)
@@ -144,7 +173,7 @@ func NewClusterShardsCommand() *cobra.Command {
 				return
 			}
 
-			clusters, err := loadClusters(kubeClient, replicas, namespace, portForwardRedis, cacheSrc, shard)
+			clusters, err := loadClusters(kubeClient, appClient, replicas, namespace, portForwardRedis, cacheSrc, shard)
 			errors.CheckError(err)
 			if len(clusters) == 0 {
 				return
@@ -200,17 +229,18 @@ func NewClusterStatsCommand() *cobra.Command {
 			errors.CheckError(err)
 
 			kubeClient := kubernetes.NewForConfigOrDie(clientCfg)
+			appClient := versioned.NewForConfigOrDie(clientCfg)
 			if replicas == 0 {
 				replicas, err = getControllerReplicas(kubeClient, namespace)
 				errors.CheckError(err)
 			}
-			clusters, err := loadClusters(kubeClient, replicas, namespace, portForwardRedis, cacheSrc, shard)
+			clusters, err := loadClusters(kubeClient, appClient, replicas, namespace, portForwardRedis, cacheSrc, shard)
 			errors.CheckError(err)
 
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			_, _ = fmt.Fprintf(w, "SERVER\tSHARD\tCONNECTION\tAPPS COUNT\tRESOURCES COUNT\n")
+			_, _ = fmt.Fprintf(w, "SERVER\tSHARD\tCONNECTION\tNAMESPACES COUNT\tAPPS COUNT\tRESOURCES COUNT\n")
 			for _, cluster := range clusters {
-				_, _ = fmt.Fprintf(w, "%s\t%d\t%s\t%d\t%d\n", cluster.Server, cluster.Shard, cluster.Info.ConnectionState.Status, cluster.Info.ApplicationsCount, cluster.Info.CacheInfo.ResourcesCount)
+				_, _ = fmt.Fprintf(w, "%s\t%d\t%s\t%d\t%d\t%d\n", cluster.Server, cluster.Shard, cluster.Info.ConnectionState.Status, len(cluster.Namespaces), cluster.Info.ApplicationsCount, cluster.Info.CacheInfo.ResourcesCount)
 			}
 			_ = w.Flush()
 		},
@@ -315,7 +345,7 @@ func NewGenClusterConfigCommand(pathOpts *clientcmd.PathOptions) *cobra.Command 
 			if clusterOpts.Name != "" {
 				contextName = clusterOpts.Name
 			}
-			clst := cmdutil.NewCluster(contextName, clusterOpts.Namespaces, conf, bearerToken, awsAuthConf, execProviderConf)
+			clst := cmdutil.NewCluster(contextName, clusterOpts.Namespaces, clusterOpts.ClusterResources, conf, bearerToken, awsAuthConf, execProviderConf)
 			if clusterOpts.InCluster {
 				clst.Server = argoappv1.KubernetesInternalAPIServerAddr
 			}
