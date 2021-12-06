@@ -141,23 +141,10 @@ export class ApplicationDetails extends React.Component<RouteComponentProps<{nam
                             const syncResourceKey = new URLSearchParams(this.props.history.location.search).get('deploy');
                             const tab = new URLSearchParams(this.props.history.location.search).get('tab');
 
-                            const orphaned: appModels.ResourceStatus[] = pref.orphanedResources
-                                ? (tree.orphanedNodes || []).map(node => ({
-                                      ...node,
-                                      status: null,
-                                      health: null
-                                  }))
-                                : [];
-                            const filteredRes = application.status.resources.concat(orphaned).filter(res => {
-                                const resNode: ResourceTreeNode = {...res, root: null, info: null, parentRefs: [], resourceVersion: '', uid: ''};
-                                resNode.root = resNode;
-                                return this.filterTreeNode(resNode, treeFilter);
-                            });
-
-                            const openGroupNodeDetails = (groupdedNodeIds: string[]) => {
+                            const prepNodes = (): any[] => {
                                 const statusByKey = new Map<string, models.ResourceStatus>();
                                 application.status.resources.forEach(res => statusByKey.set(AppUtils.nodeKey(res), res));
-                                const resources: any[] = [];
+                                const resources = new Map<string, any>();
                                 tree.nodes.forEach(node => {
                                     const resource: any = {...node};
                                     resource.uid = node.uid;
@@ -168,8 +155,20 @@ export class ApplicationDetails extends React.Component<RouteComponentProps<{nam
                                         resource.hook = status.hook;
                                         resource.requiresPruning = status.requiresPruning;
                                     }
-                                    resources.push(resource);
+                                    resources.set(node.uid, resource);
                                 });
+                                const resourcesRef = Array.from(resources.values());
+                                return resourcesRef;
+                            };
+
+                            const filteredRes = prepNodes().filter(res => {
+                                const resNode: ResourceTreeNode = {...res, root: null, info: null, parentRefs: [], resourceVersion: '', uid: ''};
+                                resNode.root = resNode;
+                                return this.filterTreeNode(resNode, treeFilter);
+                            });
+
+                            const openGroupNodeDetails = (groupdedNodeIds: string[]) => {
+                                const resources = prepNodes();
                                 this.setState({
                                     groupedResources: groupdedNodeIds
                                         ? resources.filter(res => groupdedNodeIds.includes(res.uid) || groupdedNodeIds.includes(AppUtils.nodeKey(res)))
