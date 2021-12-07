@@ -150,21 +150,18 @@ export class ApplicationDetails extends React.Component<RouteComponentProps<{nam
                                 const statusByKey = new Map<string, models.ResourceStatus>();
                                 application.status.resources.forEach(res => statusByKey.set(AppUtils.nodeKey(res), res));
                                 const resources = new Map<string, any>();
-                                tree.nodes
-                                    .map(node => ({...node, orphaned: false}))
-                                    .concat(((pref.orphanedResources && tree.orphanedNodes) || []).map(node => ({...node, orphaned: true})))
-                                    .forEach(node => {
-                                        const resource: any = {...node};
-                                        resource.uid = node.uid;
-                                        const status = statusByKey.get(AppUtils.nodeKey(node));
-                                        if (status) {
-                                            resource.health = status.health;
-                                            resource.status = status.status;
-                                            resource.hook = status.hook;
-                                            resource.requiresPruning = status.requiresPruning;
-                                        }
-                                        resources.set(node.uid, resource);
-                                    });
+                                tree.nodes.forEach(node => {
+                                    const resource: any = {...node};
+                                    resource.uid = node.uid;
+                                    const status = statusByKey.get(AppUtils.nodeKey(node));
+                                    if (status) {
+                                        resource.health = status.health;
+                                        resource.status = status.status;
+                                        resource.hook = status.hook;
+                                        resource.requiresPruning = status.requiresPruning;
+                                    }
+                                    resources.set(node.uid, resource);
+                                });
                                 const resourcesRef = Array.from(resources.values());
                                 return resourcesRef;
                             };
@@ -250,17 +247,8 @@ export class ApplicationDetails extends React.Component<RouteComponentProps<{nam
                                         </div>
                                         <div className='application-details__tree'>
                                             {refreshing && <p className='application-details__refreshing-label'>Refreshing</p>}
-                                            {((pref.view === 'tree' || pref.view === 'network') && (
-                                                <Filters pref={pref} tree={tree} onSetFilter={setFilter} onClearFilter={clearFilter}>
-                                                    {pref.view === 'tree' && (
-                                                        <button
-                                                            className={`argo-button argo-button--base${!this.state.showCompactNodes ? '-o' : ''}`}
-                                                            style={{border: 'none', width: '160px'}}
-                                                            onClick={() => this.toggleCompactView()}>
-                                                            <i className={classNames('fa fa-object-group')} style={{width: '15px', marginRight: '5px'}} />
-                                                            Group Nodes
-                                                        </button>
-                                                    )}
+                                            {((pref.view === 'tree' || pref.view === 'network' || pref.view === 'compact') && (
+                                                <Filters pref={pref} tree={tree} resourceNodes={filteredRes} onSetFilter={setFilter} onClearFilter={clearFilter}>
                                                     <ApplicationResourceTree
                                                         nodeFilter={node => this.filterTreeNode(node, treeFilter)}
                                                         selectedNodeFullName={this.selectedNodeKey}
@@ -294,7 +282,7 @@ export class ApplicationDetails extends React.Component<RouteComponentProps<{nam
                                                     />
                                                 )) || (
                                                     <div>
-                                                        <Filters pref={pref} tree={tree} onSetFilter={setFilter} onClearFilter={clearFilter}>
+                                                        <Filters pref={pref} tree={tree} resourceNodes={filteredRes} onSetFilter={setFilter} onClearFilter={clearFilter}>
                                                             {(filteredRes.length > 0 && (
                                                                 <Paginate
                                                                     page={this.state.page}
