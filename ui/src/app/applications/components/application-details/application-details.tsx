@@ -250,8 +250,17 @@ export class ApplicationDetails extends React.Component<RouteComponentProps<{nam
                                         </div>
                                         <div className='application-details__tree'>
                                             {refreshing && <p className='application-details__refreshing-label'>Refreshing</p>}
-                                            {((pref.view === 'tree' || pref.view === 'network' || pref.view === 'compact') && (
+                                            {((pref.view === 'tree' || pref.view === 'network') && (
                                                 <Filters pref={pref} tree={tree} resourceNodes={filteredRes} onSetFilter={setFilter} onClearFilter={clearFilter}>
+                                                    {pref.view === 'tree' && (
+                                                        <button
+                                                            className={`argo-button argo-button--base${!this.state.showCompactNodes ? '-o' : ''}`}
+                                                            style={{border: 'none', width: '160px'}}
+                                                            onClick={() => this.toggleCompactView()}>
+                                                            <i className={classNames('fa fa-object-group')} style={{width: '15px', marginRight: '5px'}} />
+                                                            Group Nodes
+                                                        </button>
+                                                    )}
                                                     <ApplicationResourceTree
                                                         nodeFilter={node => this.filterTreeNode(node, treeFilter)}
                                                         selectedNodeFullName={this.selectedNodeKey}
