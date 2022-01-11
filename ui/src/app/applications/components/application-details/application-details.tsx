@@ -1,4 +1,4 @@
-import {DropDownMenu, NotificationType, SlidingPanel} from 'argo-ui';
+import {DropDownMenu, NotificationType, SlidingPanel, Tab, Tabs} from 'argo-ui';
 import * as classNames from 'classnames';
 import * as PropTypes from 'prop-types';
 import * as React from 'react';
@@ -24,8 +24,9 @@ import * as AppUtils from '../utils';
 import {ApplicationResourceList} from './application-resource-list';
 import {Filters} from './application-resource-filter';
 import {urlPattern} from '../utils';
-import {ResourceStatus} from '../../../shared/models';
+import {ResourceStatus, SyncStatuses} from '../../../shared/models';
 import {ApplicationsDetailsAppDropdown} from './application-details-app-dropdown';
+import {ApplicationResourcesDiff} from '../application-resources-diff/application-resources-diff';
 
 require('./application-details.scss');
 
@@ -115,6 +116,45 @@ export class ApplicationDetails extends React.Component<RouteComponentProps<{nam
                 return 'Application Details List';
         }
         return '';
+    }
+    private getHistoryTabs(application: models.Application) {
+        const tabs: Tab[] = [];
+        const selectedDeploymentIndex = this.selectedRollbackDeploymentIndex;
+        if (selectedDeploymentIndex > -1) {
+            tabs.push({
+                title: 'PARAMETERS',
+                key: 'parameters',
+                content: (
+                    <ApplicationDeploymentHistory
+                        app={application}
+                        selectedRollbackDeploymentIndex={this.selectedRollbackDeploymentIndex}
+                        rollbackApp={info => this.rollbackApplication(info, application)}
+                        selectDeployment={i => this.setRollbackPanelVisible(i)}
+                    />
+                )
+            });
+        }
+
+        if (application.status.sync.status !== SyncStatuses.Synced) {
+            tabs.push({
+                icon: 'fa fa-file-medical',
+                title: 'DIFF',
+                key: 'diff',
+                content: (
+                    <DataLoader
+                        key='diff'
+                        load={async () =>
+                            await services.applications.managedResources(application.metadata.name, {
+                                fields: ['items.normalizedLiveState', 'items.predictedLiveState', 'items.group', 'items.kind', 'items.namespace', 'items.name']
+                            })
+                        }>
+                        {managedResources => <ApplicationResourcesDiff states={managedResources} />}
+                    </DataLoader>
+                )
+            });
+        }
+
+        return tabs;
     }
 
     public render() {
@@ -408,11 +448,11 @@ export class ApplicationDetails extends React.Component<RouteComponentProps<{nam
                                         />
                                         <SlidingPanel isShown={this.selectedRollbackDeploymentIndex > -1} onClose={() => this.setRollbackPanelVisible(-1)}>
                                             {this.selectedRollbackDeploymentIndex > -1 && (
-                                                <ApplicationDeploymentHistory
-                                                    app={application}
-                                                    selectedRollbackDeploymentIndex={this.selectedRollbackDeploymentIndex}
-                                                    rollbackApp={info => this.rollbackApplication(info, application)}
-                                                    selectDeployment={i => this.setRollbackPanelVisible(i)}
+                                                <Tabs
+                                                    navTransparent={true}
+                                                    tabs={this.getHistoryTabs(application)}
+                                                    selectedTabKey={tab}
+                                                    onTabSelected={selected => this.appContext.apis.navigation.goto('.', {tab: selected}, {replace: true})}
                                                 />
                                             )}
                                         </SlidingPanel>
