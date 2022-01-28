@@ -33,6 +33,7 @@ interface ApplicationDetailsState {
     revision?: string;
     groupedResources?: ResourceStatus[];
     showCompactNodes?: boolean;
+    filteredGraph?: any[];
 }
 
 interface FilterInput {
@@ -67,7 +68,14 @@ export class ApplicationDetails extends React.Component<RouteComponentProps<{nam
 
     constructor(props: RouteComponentProps<{name: string}>) {
         super(props);
-        this.state = {page: 0, groupedResources: [], showCompactNodes: false};
+        this.getFilteredGraph = this.getFilteredGraph.bind(this);
+        this.state = {page: 0, groupedResources: [], showCompactNodes: false, filteredGraph: []};
+    }
+    // private filteredGraph: any[] = [];
+    private getFilteredGraph(filteredNodes: any[]) {
+        console.log('filteredNodes: ');
+        console.log(filteredNodes);
+        this.setState({filteredGraph: filteredNodes});
     }
 
     private get showOperationState() {
@@ -277,6 +285,8 @@ export class ApplicationDetails extends React.Component<RouteComponentProps<{nam
                                                         useNetworkingHierarchy={pref.view === 'network'}
                                                         onClearFilter={clearFilter}
                                                         onGroupdNodeClick={groupdedNodeIds => openGroupNodeDetails(groupdedNodeIds)}
+                                                        sendData={this.getFilteredGraph}
+                                                        filters={pref.resourceFilter}
                                                     />
                                                 </Filters>
                                             )) ||

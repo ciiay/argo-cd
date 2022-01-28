@@ -43,6 +43,8 @@ export interface ApplicationResourceTreeProps {
     onClearFilter: () => any;
     showOrphanedResources: boolean;
     showCompactNodes: boolean;
+    sendData?: (filteredGraph: any[]) => void;
+    filters?: string[];
 }
 
 interface Line {
@@ -65,6 +67,8 @@ const NODE_TYPES = {
     groupedNodes: 'grouped_nodes'
 };
 
+// let filteredGraph: ResourceTreeNode[] = [];
+
 // generate lots of colors with different darkness
 const TRAFFIC_COLORS = [0, 0.25, 0.4, 0.6]
     .map(darken =>
@@ -84,29 +88,6 @@ function getGraphSize(nodes: dagre.Node[]): {width: number; height: number} {
         height = Math.max(node.y + node.height, height);
     });
     return {width, height};
-}
-
-function filterGraph(app: models.Application, filteredIndicatorParent: string, graph: dagre.graphlib.Graph, predicate: (node: ResourceTreeNode) => boolean) {
-    const appKey = appNodeKey(app);
-    let filtered = 0;
-    graph.nodes().forEach(nodeId => {
-        const node: ResourceTreeNode = graph.node(nodeId) as any;
-        const parentIds = graph.predecessors(nodeId);
-        if (node.root != null && !predicate(node) && appKey !== nodeId) {
-            const childIds = graph.successors(nodeId);
-            graph.removeNode(nodeId);
-            filtered++;
-            childIds.forEach((childId: any) => {
-                parentIds.forEach((parentId: any) => {
-                    graph.setEdge(parentId, childId);
-                });
-            });
-        }
-    });
-    if (filtered) {
-        graph.setNode(FILTERED_INDICATOR_NODE, {height: NODE_HEIGHT, width: NODE_WIDTH, count: filtered, type: NODE_TYPES.filteredIndicator});
-        graph.setEdge(filteredIndicatorParent, FILTERED_INDICATOR_NODE);
-    }
 }
 
 function groupNodes(nodes: any[], graph: dagre.graphlib.Graph) {
@@ -484,6 +465,44 @@ export const ApplicationResourceTree = (props: ApplicationResourceTreeProps) => 
     const nodes = Array.from(nodeByKey.values());
     let roots: ResourceTreeNode[] = [];
     const childrenByParentKey = new Map<string, ResourceTreeNode[]>();
+
+    let filteredNodes: any[] = [];
+
+    const [filters, setFilters] = React.useState(props.filters);
+    const [filteredGraph, setFilteredGraph] = React.useState([]);
+
+    React.useEffect(() => {
+        if (props.filters !== filters) {
+            setFilters(props.filters);
+            setFilteredGraph(filteredNodes);
+            props.sendData(filteredGraph);
+        }
+    }, [props.filters]);
+    
+    function filterGraph (app: models.Application, filteredIndicatorParent: string, graph: dagre.graphlib.Graph, predicate: (node: ResourceTreeNode) => boolean) {
+        const appKey = appNodeKey(app);
+        let filtered = 0;
+        graph.nodes().forEach(nodeId => {
+            const node: ResourceTreeNode = graph.node(nodeId) as any;
+            const parentIds = graph.predecessors(nodeId);
+            if (node.root != null && !predicate(node) && appKey !== nodeId) {
+                const childIds = graph.successors(nodeId);
+                graph.removeNode(nodeId);
+                filtered++;
+                filteredNodes.push(node);
+                childIds.forEach((childId: any) => {
+                    parentIds.forEach((parentId: any) => {
+                        graph.setEdge(parentId, childId);
+                    });
+                });
+            }
+        });
+        if (filtered) {
+            console.log('filtered: ', filtered);
+            graph.setNode(FILTERED_INDICATOR_NODE, {height: NODE_HEIGHT, width: NODE_WIDTH, count: filtered, type: NODE_TYPES.filteredIndicator});
+            graph.setEdge(filteredIndicatorParent, FILTERED_INDICATOR_NODE);
+        }
+    }
 
     if (props.useNetworkingHierarchy) {
         // Network view
