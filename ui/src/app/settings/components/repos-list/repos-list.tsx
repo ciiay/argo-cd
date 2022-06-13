@@ -76,7 +76,7 @@ interface NewGitHubAppRepoCredsParams {
     tlsClientCertKey: string;
 }
 
-export class ReposList extends React.Component<RouteComponentProps<any>, {connecting: boolean}> {
+export class ReposList extends React.Component<RouteComponentProps<any>, {connecting: boolean, currentSSHRepo: any, currentHTTPRepo: any, currentGitHubAppRepo: any}> {
     public static contextTypes = {
         router: PropTypes.object,
         apis: PropTypes.object,
@@ -92,7 +92,7 @@ export class ReposList extends React.Component<RouteComponentProps<any>, {connec
 
     constructor(props: RouteComponentProps<any>) {
         super(props);
-        this.state = {connecting: false};
+        this.state = {connecting: false, currentSSHRepo: null, currentHTTPRepo: {type: 'git'}, currentGitHubAppRepo: null};
     }
 
     public render() {
@@ -144,7 +144,9 @@ export class ReposList extends React.Component<RouteComponentProps<any>, {connec
                                             </div>
                                         </div>
                                         {repos.map(repo => (
-                                            <div className='argo-table-list__row' key={repo.repo}>
+                                            <div className='argo-table-list__row' key={repo.repo}
+                                                onClick={() => this.displayEditSliding(repo)}
+                                            >
                                                 <div className='row'>
                                                     <div className='columns small-1'>
                                                         <i className={'icon argo-icon-' + (repo.type || 'git')} />
@@ -264,11 +266,14 @@ export class ReposList extends React.Component<RouteComponentProps<any>, {connec
                         </div>
                     }>
                     <DataLoader load={() => services.projects.list('items.metadata.name').then(projects => projects.map(proj => proj.metadata.name).sort())}>
-                        {projects => (
+                        {projects => {
+                            console.log('this.state.currentHTTPRepo');
+                            console.log(this.state.currentHTTPRepo);
+                            return (
                             <Form
                                 onSubmit={params => this.connectHTTPSRepo(params as NewHTTPSRepoParams)}
                                 getApi={api => (this.formApiHTTPS = api)}
-                                defaultValues={{type: 'git'}}
+                                defaultValues={this.state.currentHTTPRepo}
                                 validateError={(params: NewHTTPSRepoParams) => ({
                                     url: (!params.url && 'Repository URL is required') || (this.credsTemplate && !this.isHTTPSUrl(params.url) && 'Not a valid HTTPS URL'),
                                     name: params.type === 'helm' && !params.name && 'Name is required',
@@ -324,7 +329,7 @@ export class ReposList extends React.Component<RouteComponentProps<any>, {connec
                                     </form>
                                 )}
                             </Form>
-                        )}
+                        )}}
                     </DataLoader>
                 </SlidingPanel>
                 <SlidingPanel
@@ -684,6 +689,30 @@ export class ReposList extends React.Component<RouteComponentProps<any>, {connec
         if (confirmed) {
             await services.repocreds.delete(url);
             this.credsLoader.reload();
+        }
+    }
+
+    private displayEditSliding(repo: any) {
+        console.log('current repo: ');
+        // console.log(repo.type);
+        console.log(repo);
+        const currentRepo = {
+            type: repo.type,
+            project: repo.project,
+            url: repo.repo
+        }
+        if (repo.type === 'git' || repo.type === 'helm') {
+            if (repo.repo.startsWith('git@')) {
+                this.setState({currentSSHRepo: currentRepo});
+                this.showConnectSSHRepo = true;
+            } else {
+                console.log('i am here to set state value!')
+                this.setState({currentHTTPRepo: currentRepo});
+                this.showConnectHTTPSRepo = true;
+            }
+        } else {
+            this.setState({currentGitHubAppRepo: currentRepo});
+            this.showConnectGitHubAppRepo = true;
         }
     }
 
