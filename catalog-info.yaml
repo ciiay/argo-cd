@@ -1,0 +1,10 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: argo-cd-test
+  annotations:
+    github.com/project-slug: ciiay/argo-cd
+spec:
+  type: other
+  lifecycle: unknown
+  owner: user:default/ciiay
